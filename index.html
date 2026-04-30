@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>業務効率化 診断フォーム</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --primary: #1e3a8a;
+      --primary-light: #3b82f6;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --bg: #f0f4f8;
+      --card: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .site-header {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white;
+      padding: 20px 24px;
+      text-align: center;
+    }
+    .site-header h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 4px; }
+    .site-header p  { font-size: 0.9rem; opacity: 0.85; }
+
+    /* ── Progress bar ── */
+    .progress-bar {
+      background: white;
+      padding: 14px 24px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .progress-step { display: flex; align-items: center; }
+    .step-circle {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.85rem;
+      background: var(--border); color: var(--text-muted);
+      transition: all 0.3s;
+    }
+    .step-circle.active { background: var(--primary); color: white; }
+    .step-circle.done   { background: var(--success); color: white; }
+    .step-label { margin: 0 10px; font-size: 0.82rem; color: var(--text-muted); font-weight: 500; }
+    .step-label.active  { color: var(--primary); font-weight: 700; }
+    .step-connector { width: 48px; height: 2px; background: var(--border); }
+    .step-connector.done { background: var(--success); }
+
+    /* ── Layout ── */
+    .container { max-width: 780px; margin: 0 auto; padding: 28px 16px; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 28px 24px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+      margin-bottom: 20px;
+    }
+    .card h2 { font-size: 1.3rem; color: var(--primary); margin-bottom: 6px; }
+    .card .sub { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px; }
+
+    /* ── Form ── */
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-weight: 600; margin-bottom: 7px; font-size: 0.95rem; }
+    input[type="text"], input[type="number"], select {
+      width: 100%; padding: 11px 14px;
+      border: 2px solid var(--border); border-radius: 10px;
+      font-size: 1rem; font-family: inherit;
+      transition: border-color 0.2s; background: white;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--primary-light); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .required { color: #ef4444; margin-left: 2px; }
+
+    /* ── Question cards ── */
+    .cat-card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+      margin-bottom: 20px;
+    }
+    .cat-title {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 1.15rem; font-weight: 800; color: var(--primary);
+      margin-bottom: 18px;
+    }
+    .cat-icon {
+      width: 32px; height: 32px;
+      background: var(--primary); color: white;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem;
+    }
+
+    .q-card {
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin-bottom: 12px;
+      transition: box-shadow 0.2s;
+    }
+    .q-card:last-child { margin-bottom: 0; }
+    .q-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,0.09); }
+    .q-num { font-size: 0.75rem; font-weight: 700; color: var(--primary-light); letter-spacing: 1px; margin-bottom: 5px; }
+    .q-text { font-size: 1.05rem; font-weight: 600; margin-bottom: 14px; line-height: 1.5; }
+
+    .options { display: flex; gap: 8px; flex-wrap: wrap; }
+    .opt-label { flex: 1; min-width: 70px; cursor: pointer; }
+    .opt-label input { display: none; }
+    .opt-btn {
+      display: block; text-align: center;
+      padding: 9px 12px;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.9rem; font-weight: 500;
+      color: var(--text-muted); background: #f8fafc;
+      transition: all 0.18s;
+      user-select: none;
+    }
+    .opt-label input:checked + .opt-btn {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: white;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px; width: 100%;
+      padding: 14px 24px; border-radius: 12px;
+      font-size: 1.05rem; font-weight: 700;
+      cursor: pointer; border: none;
+      font-family: inherit; transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      color: white; margin-top: 20px;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(30,58,138,0.35); }
+    .btn-back {
+      background: none; border: none;
+      color: var(--text-muted); font-size: 0.9rem;
+      cursor: pointer; font-family: inherit;
+      text-decoration: underline;
+      display: block; text-align: center;
+      margin-top: 12px; padding: 6px;
+    }
+
+    /* ── Results ── */
+    .res-hero {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white; border-radius: 16px;
+      padding: 28px 24px; text-align: center;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 16px rgba(30,58,138,0.3);
+    }
+    .res-hero .label { font-size: 0.95rem; opacity: 0.8; margin-bottom: 4px; }
+    .res-hero .facility { font-size: 2rem; font-weight: 900; margin-bottom: 4px; }
+    .res-hero .industry { font-size: 1rem; opacity: 0.8; margin-bottom: 20px; }
+
+    .score-row {
+      display: flex; align-items: center; justify-content: center;
+      gap: 28px; flex-wrap: wrap;
+    }
+    .score-ring {
+      width: 120px; height: 120px; border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      border: 4px solid rgba(255,255,255,0.45);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    .score-num  { font-size: 2.6rem; font-weight: 900; line-height: 1; }
+    .score-sub  { font-size: 0.8rem; opacity: 0.8; }
+
+    .grade-block { text-align: center; }
+    .grade-letter { font-size: 5rem; font-weight: 900; line-height: 1; }
+    .grade-desc   { font-size: 1.1rem; font-weight: 700; margin-top: 2px; }
+
+    .res-meta { text-align: center; }
+    .res-meta .date-label { font-size: 0.85rem; opacity: 0.75; }
+    .res-meta .date-val   { font-size: 1.05rem; font-weight: 600; margin-top: 2px; }
+    .res-meta .meta-sub   { font-size: 0.8rem; opacity: 0.7; margin-top: 4px; }
+
+    /* Cost banner */
+    .cost-banner {
+      background: linear-gradient(135deg, #d97706, #ef4444);
+      color: white; border-radius: 16px;
+      padding: 24px; text-align: center;
+      margin-bottom: 20px;
+    }
+    .cost-banner h3 { font-size: 1rem; opacity: 0.9; margin-bottom: 6px; }
+    .cost-main  { font-size: 3rem; font-weight: 900; }
+    .cost-small { font-size: 0.95rem; opacity: 0.85; margin-top: 6px; line-height: 1.6; }
+
+    /* Chart card */
+    .chart-wrap { position: relative; height: 320px; max-width: 420px; margin: 0 auto; }
+
+    /* Category grid */
+    .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+    .cat-item {
+      background: #f8fafc; border-radius: 12px;
+      padding: 14px; border-left: 4px solid var(--border);
+    }
+    .cat-item.lv-high { border-color: var(--danger); background: #fef2f2; }
+    .cat-item.lv-mid  { border-color: var(--warning); background: #fffbeb; }
+    .cat-item.lv-low  { border-color: var(--success); background: #f0fdf4; }
+    .cat-item-name { font-size: 0.88rem; font-weight: 700; margin-bottom: 8px; }
+    .bar-track { background: var(--border); border-radius: 100px; height: 7px; overflow: hidden; margin-bottom: 5px; }
+    .bar-fill { height: 100%; border-radius: 100px; }
+    .lv-high .bar-fill { background: var(--danger); }
+    .lv-mid  .bar-fill { background: var(--warning); }
+    .lv-low  .bar-fill { background: var(--success); }
+    .cat-item-score { font-size: 0.78rem; color: var(--text-muted); }
+
+    /* Recommendation */
+    .reco-card {
+      background: linear-gradient(135deg, #eff6ff, #f0fdf4);
+      border: 2px solid #bfdbfe; border-radius: 16px;
+      padding: 28px 24px; margin-bottom: 20px;
+    }
+    .reco-card h3 { font-size: 1.25rem; color: var(--primary); margin-bottom: 18px; }
+    .reco-body { font-size: 1.05rem; line-height: 2; color: var(--text); }
+    .reco-body p { margin-bottom: 16px; }
+    .reco-body p:last-child { margin-bottom: 0; }
+    .highlight {
+      background: var(--primary); color: white;
+      border-radius: 12px; padding: 18px 20px;
+      font-size: 1.05rem; line-height: 1.9;
+      margin: 16px 0;
+    }
+    .highlight strong { font-size: 1.15rem; }
+
+    /* Action card */
+    .action-card { text-align: center; }
+    .print-btn {
+      background: white; color: var(--primary);
+      border: 2px solid var(--primary);
+      padding: 12px 32px; border-radius: 10px;
+      font-size: 1rem; font-weight: 700;
+      cursor: pointer; font-family: inherit;
+      transition: all 0.2s;
+    }
+    .print-btn:hover { background: var(--primary); color: white; }
+
+    /* Steps visibility */
+    .step { display: none; }
+    .step.active { display: block; }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .anim { opacity: 0; animation: fadeUp 0.45s ease forwards; }
+
+    /* Print */
+    @media print {
+      .progress-bar, .btn, .btn-back, .print-btn, .action-card { display: none !important; }
+      .site-header, .res-hero, .cost-banner, .reco-card, .highlight {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+
+    /* Responsive */
+    @media (max-width: 560px) {
+      .form-row { grid-template-columns: 1fr; }
+      .cat-grid  { grid-template-columns: 1fr; }
+      .score-row { gap: 16px; }
+      .grade-letter { font-size: 3.5rem; }
+      .cost-main { font-size: 2.2rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="site-header">
+  <h1>業務効率化 診断フォーム</h1>
+  <p>現在の業務課題を診断し、導入効果をご提案します</p>
+</div>
+
+<div class="progress-bar">
+  <div class="progress-step">
+    <div class="step-circle active" id="c1">1</div>
+    <span class="step-label active" id="l1">基本情報</span>
+  </div>
+  <div class="step-connector" id="con1"></div>
+  <div class="progress-step">
+    <div class="step-circle" id="c2">2</div>
+    <span class="step-label" id="l2">業務課題チェック</span>
+  </div>
+  <div class="step-connector" id="con2"></div>
+  <div class="progress-step">
+    <div class="step-circle" id="c3">3</div>
+    <span class="step-label" id="l3">診断結果</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ===== STEP 1: 基本情報 ===== -->
+  <div class="step active" id="step-1">
+    <div class="card anim">
+      <h2>基本情報の入力</h2>
+      <p class="sub">正確な効果測定のためにご入力ください</p>
+
+      <div class="form-group">
+        <label>施設名・会社名<span class="required">*</span></label>
+        <input type="text" id="facilityName" placeholder="例：〇〇保育園、△△介護施設" />
+      </div>
+
+      <div class="form-group">
+        <label>業種<span class="required">*</span></label>
+        <select id="industry">
+          <option value="">選択してください</option>
+          <option>保育・幼稚園</option>
+          <option>介護・福祉施設</option>
+          <option>医療・クリニック</option>
+          <option>教育・学校</option>
+          <option>小売・店舗</option>
+          <option>製造業</option>
+          <option>建設・不動産</option>
+          <option>サービス業</option>
+          <option>IT・テクノロジー</option>
+          <option>その他</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>職員数（人）</label>
+          <input type="number" id="staffCount" placeholder="例：20" min="1" />
+        </div>
+        <div class="form-group">
+          <label>月間稼働日数</label>
+          <input type="number" id="workDays" placeholder="例：22" min="1" max="31" value="22" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>1人あたり時給目安（円）</label>
+        <input type="number" id="hourlyWage" placeholder="例：1500" min="500" value="1500" />
+      </div>
+
+      <button class="btn btn-primary" onclick="goStep2()">業務課題チェックへ →</button>
+    </div>
+  </div>
+
+  <!-- ===== STEP 2: 質問 ===== -->
+  <div class="step" id="step-2">
+    <div id="q-container"></div>
+    <div class="card">
+      <button class="btn btn-primary" onclick="showResults()">診断結果を見る →</button>
+      <button class="btn-back" onclick="gotoStep(1)">← 基本情報に戻る</button>
+    </div>
+  </div>
+
+  <!-- ===== STEP 3: 結果 ===== -->
+  <div class="step" id="step-3">
+    <div id="results"></div>
+  </div>
+
+</div>
+
+<script>
+/* ==============================
+   Data
+============================== */
+const QUESTIONS = [
+  // 情報共有
+  { id:'q1',  cat:'情報共有',          text:'職員間の連絡手段はいくつありますか？',
+    opts:[ {l:'1つ', v:0}, {l:'2〜3つ', v:1}, {l:'4つ以上', v:2} ] },
+  { id:'q2',  cat:'情報共有',          text:'連絡内容が後から探せないことはありますか？',
+    opts:[ {l:'よくある', v:2}, {l:'時々ある', v:1}, {l:'ない', v:0} ] },
+  { id:'q3',  cat:'情報共有',          text:'口頭・紙・LINEなどで伝達漏れはありますか？',
+    opts:[ {l:'よくある', v:2}, {l:'時々ある', v:1}, {l:'ない', v:0} ] },
+  { id:'q13', cat:'情報共有',          text:'メール返信に時間がかかりますか？',
+    opts:[ {l:'よくある', v:2}, {l:'時々ある', v:1}, {l:'ない', v:0} ] },
+  // ファイル管理
+  { id:'q4',  cat:'ファイル管理',      text:'ExcelやWordの最新版が分からなくなることはありますか？',
+    opts:[ {l:'よくある', v:2}, {l:'時々ある', v:1}, {l:'ない', v:0} ] },
+  { id:'q5',  cat:'ファイル管理',      text:'ファイルが個人PCやUSBに保存されていますか？',
+    opts:[ {l:'はい', v:2}, {l:'一部ある', v:1}, {l:'ない', v:0} ] },
+  { id:'q6',  cat:'ファイル管理',      text:'必要な資料を探すのに時間がかかりますか？',
+    opts:[ {l:'よくある', v:2}, {l:'時々ある', v:1}, {l:'ない', v:0} ] },
+  // 写真・データ管理
+  { id:'q7',  cat:'写真・データ管理',  text:'写真は個人スマホで撮影・保存されていますか？',
+    opts:[ {l:'はい', v:2}, {l:'一部ある', v:1}, {l:'ない', v:0} ] },
+  { id:'q8',  cat:'写真・データ管理',  text:'写真をPCへ送る作業がありますか？',
+    opts:[ {l:'はい', v:2}, {l:'時々ある', v:1}, {l:'ない', v:0} ] },
+  { id:'q9',  cat:'写真・データ管理',  text:'園児・利用者ごとの写真確認に時間がかかりますか？',
+    opts:[ {l:'よくある', v:2}, {l:'時々ある', v:1}, {l:'ない', v:0} ] },
+  // セキュリティ・引継ぎ
+  { id:'q10', cat:'セキュリティ・引継ぎ', text:'退職者のデータ引き継ぎで困ったことはありますか？',
+    opts:[ {l:'よくある', v:2}, {l:'時々ある', v:1}, {l:'ない', v:0} ] },
+  { id:'q11', cat:'セキュリティ・引継ぎ', text:'個人アカウントで業務データを扱っていますか？',
+    opts:[ {l:'はい', v:2}, {l:'一部ある', v:1}, {l:'ない', v:0} ] },
+  { id:'q12', cat:'セキュリティ・引継ぎ', text:'誰が何を管理しているか分からない業務がありますか？',
+    opts:[ {l:'よくある', v:2}, {l:'時々ある', v:1}, {l:'ない', v:0} ] },
+  // 業務効率化
+  { id:'q14', cat:'業務効率化',        text:'お便り・資料作成に時間がかかりますか？',
+    opts:[ {l:'よくある', v:2}, {l:'時々ある', v:1}, {l:'ない', v:0} ] },
+  { id:'q15', cat:'業務効率化',        text:'AIを業務に活用したいですか？',
+    opts:[ {l:'ぜひ活用したい', v:2}, {l:'検討したい', v:1}, {l:'今は考えていない', v:0} ], isAI:true },
+  { id:'q16', cat:'業務効率化',        text:'勤怠管理や申請書類は紙・手書きで行っていますか？',
+    opts:[ {l:'はい', v:2}, {l:'一部ある', v:1}, {l:'ない', v:0} ] },
+  { id:'q17', cat:'業務効率化',        text:'外出先でも業務の確認・対応が必要になることがありますか？',
+    opts:[ {l:'よくある', v:2}, {l:'時々ある', v:1}, {l:'ない', v:0} ] },
+];
+
+const CATS = {
+  '情報共有':           { max:8,  qs:['q1','q2','q3','q13'], icon:'💬' },
+  'ファイル管理':       { max:6,  qs:['q4','q5','q6'],       icon:'📁' },
+  '写真・データ管理':   { max:6,  qs:['q7','q8','q9'],       icon:'📷' },
+  'セキュリティ・引継ぎ':{ max:6, qs:['q10','q11','q12'],   icon:'🔒' },
+  '業務効率化':         { max:8,  qs:['q14','q15','q16','q17'], icon:'⚡' },
+};
+
+const CAT_RECO = {
+  '情報共有':
+    '複数の連絡ツールが混在することで、情報の分散・伝達漏れが常態化しています。統合されたコミュニケーション基盤を導入することで、過去のやり取りの検索や未読確認が一元化でき、ミスコミュニケーションを大幅に削減できます。',
+  'ファイル管理':
+    '個人PCやUSBへの分散保存は、バージョン管理ミスや情報紛失のリスクを高めます。クラウドストレージへ移行することで、常に最新版へのアクセスが保証され、資料を探す時間も削減されます。',
+  '写真・データ管理':
+    '個人スマホでの撮影・管理はセキュリティリスクと転送コストが高い状態です。専用の写真管理システムにより、撮影から分類・共有・保管まで一気通貫で対応でき、対象者ごとの管理も即座に行えます。',
+  'セキュリティ・引継ぎ':
+    '業務の属人化や個人アカウント依存は、退職時の情報断絶リスクを高めます。組織アカウントの統一とアクセス権限管理を整備することで、安全で継続性のある業務環境が構築できます。',
+  '業務効率化':
+    '紙・手書き業務や手動対応の多い環境は、職員の時間を大幅に消費しています。ワークフローのデジタル化とAI活用により、お便り作成・勤怠集計・申請処理などの定型業務を自動化し、本来の業務に集中できる環境を実現できます。',
+};
+
+let answers = {};
+let radarChart = null;
+
+/* ==============================
+   Step 1 → 2
+============================== */
+function goStep2() {
+  const name     = document.getElementById('facilityName').value.trim();
+  const industry = document.getElementById('industry').value;
+  if (!name || !industry) { alert('施設名・会社名と業種は必須です'); return; }
+  buildQuestions();
+  gotoStep(2);
+}
+
+/* ==============================
+   Build question HTML
+============================== */
+function buildQuestions() {
+  const container = document.getElementById('q-container');
+  container.innerHTML = '';
+  const catOrder = Object.keys(CATS);
+  let qNum = 0;
+
+  catOrder.forEach(catName => {
+    const catInfo = CATS[catName];
+    const catEl = document.createElement('div');
+    catEl.className = 'cat-card anim';
+
+    let html = `<div class="cat-title"><div class="cat-icon">${catInfo.icon}</div>${catName}</div>`;
+
+    catInfo.qs.forEach(qid => {
+      const q = QUESTIONS.find(x => x.id === qid);
+      if (!q) return;
+      qNum++;
+      html += `
+        <div class="q-card" id="qcard-${q.id}">
+          <div class="q-num">Q${qNum}</div>
+          <div class="q-text">${q.text}</div>
+          <div class="options">
+            ${q.opts.map(o => `
+              <label class="opt-label">
+                <input type="radio" name="${q.id}" value="${o.v}"
+                  onchange="setAnswer('${q.id}', ${o.v})">
+                <div class="opt-btn">${o.l}</div>
+              </label>
+            `).join('')}
+          </div>
+        </div>`;
+    });
+
+    catEl.innerHTML = html;
+    container.appendChild(catEl);
+  });
+}
+
+function setAnswer(qid, val) {
+  answers[qid] = val;
+  const card = document.getElementById('qcard-' + qid);
+  if (card) card.style.borderColor = 'var(--success)';
+}
+
+/* ==============================
+   Step 2 → 3 (Results)
+============================== */
+function showResults() {
+  const allIds = QUESTIONS.map(q => q.id);
+  const missing = allIds.filter(id => !(id in answers));
+  if (missing.length > 0) {
+    alert(`まだ回答されていない質問が ${missing.length} 問あります`);
+    return;
+  }
+  renderResults();
+  gotoStep(3);
+}
+
+function renderResults() {
+  const facilityName = document.getElementById('facilityName').value;
+  const industry     = document.getElementById('industry').value;
+  const staff        = parseInt(document.getElementById('staffCount').value)  || 20;
+  const workDays     = parseInt(document.getElementById('workDays').value)    || 22;
+  const wage         = parseInt(document.getElementById('hourlyWage').value)  || 1500;
+
+  /* ── category scores ── */
+  const catScores = {};
+  let totalScore = 0, totalMax = 0;
+
+  for (const [name, info] of Object.entries(CATS)) {
+    let s = 0;
+    info.qs.forEach(qid => { s += (answers[qid] || 0); });
+    const pct = Math.round(s / info.max * 100);
+    catScores[name] = { score: s, max: info.max, pct };
+    totalScore += s;
+    totalMax   += info.max;
+  }
+
+  const totalPct = Math.round(totalScore / totalMax * 100);
+
+  /* ── grade ── */
+  let grade, gradeDesc;
+  if      (totalPct >= 75) { grade = 'D'; gradeDesc = '早急な改善が必要'; }
+  else if (totalPct >= 50) { grade = 'C'; gradeDesc = '多くの課題あり'; }
+  else if (totalPct >= 25) { grade = 'B'; gradeDesc = '部分的な改善余地あり'; }
+  else                     { grade = 'A'; gradeDesc = '比較的整備されています'; }
+
+  /* ── cost ── */
+  const wasteMins   = Math.round(totalPct / 100 * 90);   // max 90 min/day/person
+  const monthlyLoss = Math.round((wasteMins / 60) * wage * staff * workDays);
+  const yearlyLoss  = monthlyLoss * 12;
+
+  /* ── date ── */
+  const d = new Date();
+  const dateStr = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+
+  /* ── sorted categories ── */
+  const sorted = Object.entries(catScores).sort((a, b) => b[1].pct - a[1].pct);
+
+  /* ── AI interest ── */
+  const aiVal = answers['q15'] || 0;
+
+  /* ── render ── */
+  document.getElementById('results').innerHTML = `
+    <div class="res-hero anim">
+      <div class="label">業務効率化 診断結果</div>
+      <div class="facility">${facilityName}</div>
+      <div class="industry">${industry}</div>
+      <div class="score-row">
+        <div class="score-ring">
+          <div class="score-num">${totalPct}%</div>
+          <div class="score-sub">課題スコア</div>
+        </div>
+        <div class="grade-block">
+          <div class="grade-letter">${grade}</div>
+          <div class="grade-desc">${gradeDesc}</div>
+        </div>
+        <div class="res-meta">
+          <div class="date-label">診断日</div>
+          <div class="date-val">${dateStr}</div>
+          <div class="meta-sub">${staff}名 ／ 月${workDays}日稼働</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cost-banner anim" style="animation-delay:.1s">
+      <h3>月間の業務ロスコスト（推計）</h3>
+      <div class="cost-main">月 約 ${fmt(monthlyLoss)}</div>
+      <div class="cost-small">
+        年間換算 約 ${fmt(yearlyLoss)} ／ 1人あたり 約 ${wasteMins}分/日 の業務ロス
+      </div>
+    </div>
+
+    <div class="card anim" style="animation-delay:.2s">
+      <h2>カテゴリ別 課題分析</h2>
+      <p class="sub">5つの領域でレーダーチャート表示</p>
+      <div class="chart-wrap">
+        <canvas id="radarCanvas"></canvas>
+      </div>
+      <div class="cat-grid">
+        ${sorted.map(([name, d]) => {
+          const lv = d.pct >= 66 ? 'high' : d.pct >= 33 ? 'mid' : 'low';
+          const ll = d.pct >= 66 ? '要対処' : d.pct >= 33 ? '要改善' : '問題なし';
+          return `
+            <div class="cat-item lv-${lv}">
+              <div class="cat-item-name">${CATS[name].icon} ${name}</div>
+              <div class="bar-track"><div class="bar-fill" style="width:${d.pct}%"></div></div>
+              <div class="cat-item-score">${d.score} / ${d.max}点 — <strong>${ll}</strong></div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="reco-card anim" style="animation-delay:.3s">
+      <h3>AI 診断レポート</h3>
+      <div class="reco-body">
+        ${buildReco(sorted, catScores, aiVal, facilityName, industry, staff, wasteMins, monthlyLoss)}
+      </div>
+    </div>
+
+    <div class="card action-card anim" style="animation-delay:.4s">
+      <button class="print-btn" onclick="window.print()">印刷 / PDF保存</button>
+      <button class="btn-back" onclick="resetAll()">← もう一度診断する</button>
+    </div>
+  `;
+
+  setTimeout(() => drawRadar(catScores), 250);
+}
+
+function fmt(n) {
+  if (n >= 10000) return `${Math.round(n/10000).toLocaleString()}万円`;
+  return `${n.toLocaleString()}円`;
+}
+
+/* ==============================
+   Recommendation text
+============================== */
+function buildReco(sorted, catScores, aiVal, name, industry, staff, wasteMins, monthlyLoss) {
+  const highCats = sorted.filter(([,d]) => d.pct >= 50).map(([n]) => n);
+  const midCats  = sorted.filter(([,d]) => d.pct >= 33 && d.pct < 50).map(([n]) => n);
+
+  let parts = [];
+
+  parts.push(`<p><strong>${name}様</strong>の診断が完了しました。今回の結果から、現在の業務フローには改善できる点が複数見られます。</p>`);
+
+  if (highCats.length > 0) {
+    parts.push(`<p>特に <strong>「${highCats.join('」「')}」</strong> の領域でスコアが高く、業務効率化の最優先ターゲットです。</p>`);
+    parts.push(highCats.map(c => `<p>▶ <strong>${c}</strong>：${CAT_RECO[c]}</p>`).join(''));
+  } else if (midCats.length > 0) {
+    parts.push(`<p><strong>「${midCats.join('」「')}」</strong> の領域で改善の余地があります。</p>`);
+    parts.push(midCats.map(c => `<p>▶ <strong>${c}</strong>：${CAT_RECO[c]}</p>`).join(''));
+  } else {
+    parts.push(`<p>全領域で大きな課題は見られませんでした。さらなる生産性向上のため、AI活用や業務自動化の段階的な導入をご検討ください。</p>`);
+  }
+
+  if (aiVal >= 1) {
+    const aiLevel = aiVal === 2 ? '非常に高い関心をお持ち' : '前向きにご検討中';
+    parts.push(`<p><strong>【AI活用の可能性】</strong><br>AI活用について${aiLevel}です。${industry}の現場では、議事録の自動作成・お便り文章生成・問い合わせ自動対応・写真の自動分類などで大きな効果を発揮します。現状の課題と組み合わせることで、導入効果を最大化できます。</p>`);
+  }
+
+  parts.push(`
+    <div class="highlight">
+      導入による期待効果（試算）<br><br>
+      現在の業務課題を解消することで、<strong>月間 約 ${fmt(monthlyLoss)}</strong> 分の業務コストを削減できる見込みです。<br>
+      職員 ${staff}名の一人ひとりが <strong>1日約 ${wasteMins}分</strong> を本来の業務に使えるようになり、サービス品質の向上にも直結します。<br><br>
+      初期導入コストを考慮しても、多くの場合 <strong>3〜6ヶ月以内に投資回収</strong> が見込まれます。
+    </div>
+  `);
+
+  parts.push(`<p>上記の課題に対し、最適なソリューションをご提案させていただきます。ぜひ具体的なプランについてご相談ください。</p>`);
+
+  return parts.join('');
+}
+
+/* ==============================
+   Radar Chart
+============================== */
+function drawRadar(catScores) {
+  const canvas = document.getElementById('radarCanvas');
+  if (!canvas) return;
+  if (radarChart) { radarChart.destroy(); }
+
+  const labels = Object.keys(catScores);
+  const data   = labels.map(l => catScores[l].pct);
+
+  radarChart = new Chart(canvas, {
+    type: 'radar',
+    data: {
+      labels,
+      datasets: [{
+        label: '課題スコア（%）',
+        data,
+        backgroundColor: 'rgba(239,68,68,0.18)',
+        borderColor:      'rgba(239,68,68,0.85)',
+        borderWidth: 2.5,
+        pointBackgroundColor: 'rgba(239,68,68,1)',
+        pointRadius: 5,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        r: {
+          min: 0, max: 100,
+          ticks: { stepSize: 25, font: { size: 11 } },
+          pointLabels: { font: { size: 12, weight: 'bold' }, color: '#1e293b' },
+          grid: { color: 'rgba(0,0,0,0.1)' },
+        }
+      },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
+/* ==============================
+   Navigation
+============================== */
+function gotoStep(n) {
+  document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+  document.getElementById('step-' + n).classList.add('active');
+  updateProgress(n);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function updateProgress(cur) {
+  for (let i = 1; i <= 3; i++) {
+    const c = document.getElementById('c' + i);
+    const l = document.getElementById('l' + i);
+    c.className = 'step-circle';
+    l.className = 'step-label';
+    if (i < cur)      { c.classList.add('done');   c.textContent = '✓'; }
+    else if (i === cur){ c.classList.add('active'); l.classList.add('active'); c.textContent = i; }
+    else               { c.textContent = i; }
+  }
+  for (let i = 1; i <= 2; i++) {
+    document.getElementById('con' + i).className = 'step-connector' + (i < cur ? ' done' : '');
+  }
+}
+
+function resetAll() {
+  answers = {};
+  document.getElementById('facilityName').value = '';
+  document.getElementById('industry').value = '';
+  document.getElementById('staffCount').value = '';
+  document.getElementById('workDays').value = '22';
+  document.getElementById('hourlyWage').value = '1500';
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('q-container').innerHTML = '';
+  gotoStep(1);
+}
+</script>
+</body>
+</html>
