@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>業務効率化 診断フォーム</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     :root {
       --primary: #1e3a8a;
@@ -481,43 +482,78 @@ const CAT_RECO = {
   '業務効率化':'紙・手書き業務や手動対応の多い環境は、職員の時間を大幅に消費しています。ワークフローのデジタル化とAI活用により、お便り作成・勤怠集計・申請処理などの定型業務を自動化し、本来の業務に集中できる環境を実現できます。',
 };
 
-const STORAGE_KEY = 'gw_diagnosis_history';
+/* ==============================
+   Supabase
+============================== */
+const { createClient } = window.supabase;
+const db = createClient(
+  'https://mrgqofsxdhpdesgkwuez.supabase.co',
+  'sb_publishable_Sj_dXER-0u_COfhF_UY3jA_TnzgHuqz'
+);
+
 let answers = {};
 let radarChart = null;
+let histCache = [];   // 履歴一覧のメモリキャッシュ
 
-/* ==============================
-   localStorage helpers
-============================== */
-function loadHistory() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
-  catch { return []; }
+/* DB レコード → アプリ内データ変換 */
+function rowToData(r) {
+  return {
+    id:          r.id,
+    savedAt:     r.saved_at,
+    facilityName:r.facility_name,
+    industry:    r.industry,
+    staff:       r.staff,
+    workDays:    r.work_days,
+    wage:        r.wage,
+    answers:     r.answers,
+    totalPct:    r.total_pct,
+    grade:       r.grade,
+    gradeDesc:   r.grade_desc,
+    catScores:   r.cat_scores,
+    wasteMins:   r.waste_mins,
+    monthlyLoss: r.monthly_loss,
+  };
 }
 
-function saveToHistory(data) {
-  const list = loadHistory();
-  list.unshift(data);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  updateBadge();
+async function saveToHistory(data) {
+  const { error } = await db.from('diagnoses').insert({
+    facility_name: data.facilityName,
+    industry:      data.industry,
+    staff:         data.staff,
+    work_days:     data.workDays,
+    wage:          data.wage,
+    answers:       data.answers,
+    total_pct:     data.totalPct,
+    grade:         data.grade,
+    grade_desc:    data.gradeDesc,
+    cat_scores:    data.catScores,
+    waste_mins:    data.wasteMins,
+    monthly_loss:  data.monthlyLoss,
+  });
+  if (error) console.error('save error:', error);
+  await updateBadge();
 }
 
-function deleteById(id) {
-  const list = loadHistory().filter(d => d.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  updateBadge();
+async function deleteById(id) {
+  await db.from('diagnoses').delete().eq('id', id);
+  await updateBadge();
 }
 
-function deleteAll() {
-  const list = loadHistory();
-  if (!list.length) return;
-  if (!confirm(`${list.length}件の診断データをすべて削除しますか？`)) return;
-  localStorage.removeItem(STORAGE_KEY);
-  updateBadge();
+async function deleteAll() {
+  const { count } = await db.from('diagnoses')
+    .select('*', { count: 'exact', head: true });
+  if (!count) return;
+  if (!confirm(`${count}件の診断データをすべて削除しますか？`)) return;
+  await db.from('diagnoses').delete().gte('id', 1);
+  await updateBadge();
   showView('history-list');
 }
 
-function updateBadge() {
-  const n = loadHistory().length;
+async function updateBadge() {
+  const { count } = await db.from('diagnoses')
+    .select('*', { count: 'exact', head: true });
   const el = document.getElementById('hist-badge');
+  const n = count || 0;
   el.textContent = n;
   el.style.display = n > 0 ? 'inline' : 'none';
 }
@@ -744,7 +780,7 @@ function setAnswer(qid, val) {
   if (card) card.style.borderColor = 'var(--success)';
 }
 
-function submitResults() {
+async function submitResults() {
   const missing = QUESTIONS.map(q => q.id).filter(id => !(id in answers));
   if (missing.length > 0) { alert(`まだ回答されていない質問が ${missing.length} 問あります`); return; }
 
@@ -757,6 +793,7 @@ function submitResults() {
     staff, workDays, wage, answers
   );
 
+  // Supabase に保存（非同期・バックグラウンド）
   saveToHistory(data);
 
   const html = buildResultsHTML(data, '← もう一度診断する', 'resetAll()');
@@ -813,11 +850,21 @@ function showView(name) {
 /* ==============================
    History list
 ============================== */
-function renderHistoryList() {
-  const list = loadHistory();
+async function renderHistoryList() {
   const el = document.getElementById('hist-list-body');
+  el.innerHTML = `<div class="hist-empty">読み込み中...</div>`;
 
-  if (!list.length) {
+  const { data: rows, error } = await db.from('diagnoses')
+    .select('*').order('saved_at', { ascending: false });
+
+  if (error) {
+    el.innerHTML = `<div class="hist-empty">データの取得に失敗しました</div>`;
+    return;
+  }
+
+  histCache = (rows || []).map(rowToData);
+
+  if (!histCache.length) {
     el.innerHTML = `<div class="hist-empty">まだ診断データがありません</div>`;
     return;
   }
@@ -836,7 +883,7 @@ function renderHistoryList() {
         </tr>
       </thead>
       <tbody>
-        ${list.map(d => `
+        ${histCache.map(d => `
           <tr>
             <td>${fmtDate(d.savedAt)}</td>
             <td><strong>${d.facilityName}</strong></td>
@@ -855,20 +902,19 @@ function renderHistoryList() {
     </table>`;
 }
 
-function confirmDelete(id) {
-  const list = loadHistory();
-  const item = list.find(d => d.id === id);
+async function confirmDelete(id) {
+  const item = histCache.find(d => d.id === id);
   if (!item) return;
   if (!confirm(`「${item.facilityName}」の診断データを削除しますか？`)) return;
-  deleteById(id);
-  renderHistoryList();
+  await deleteById(id);
+  await renderHistoryList();
 }
 
 /* ==============================
    History detail
 ============================== */
 function openHistoryDetail(id) {
-  const data = loadHistory().find(d => d.id === id);
+  const data = histCache.find(d => d.id === id);
   if (!data) return;
   const html = buildResultsHTML(data, '← 履歴一覧に戻る', "showView('history-list')");
   document.getElementById('hist-detail-body').innerHTML = html;
