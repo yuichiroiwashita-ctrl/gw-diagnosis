@@ -291,6 +291,25 @@
       }
     }
 
+    /* ── Remark textarea ── */
+    .remark-area {
+      width: 100%; margin-top: 10px;
+      padding: 8px 12px;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      font-size: 0.88rem; font-family: inherit;
+      color: var(--text); resize: vertical; min-height: 52px;
+      transition: border-color 0.2s; background: #fafafa;
+    }
+    .remark-area:focus { outline: none; border-color: var(--primary-light); background: white; }
+    .remark-label { font-size: 0.75rem; color: var(--text-muted); margin-top: 10px; display: block; }
+
+    /* ── Remarks summary in results ── */
+    .remarks-section { margin-top: 20px; }
+    .remarks-section h3 { font-size: 1rem; color: var(--primary); margin-bottom: 12px; }
+    .remark-row { display: flex; gap: 10px; margin-bottom: 8px; font-size: 0.9rem; }
+    .remark-qnum { font-weight: 700; color: var(--primary-light); min-width: 32px; }
+    .remark-text { color: var(--text); line-height: 1.5; }
+
     /* ── Responsive ── */
     @media (max-width: 600px) {
       .form-row { grid-template-columns: 1fr; }
@@ -375,6 +394,16 @@
             <label>月間稼働日数</label>
             <input type="number" id="workDays" placeholder="例：22" min="1" max="31" value="22" />
           </div>
+        </div>
+
+        <div class="form-group">
+          <label>住所</label>
+          <input type="text" id="address" placeholder="例：東京都新宿区〇〇1-2-3" />
+        </div>
+
+        <div class="form-group">
+          <label>電話番号</label>
+          <input type="tel" id="phone" placeholder="例：03-1234-5678" />
         </div>
 
         <div class="form-group">
@@ -492,6 +521,7 @@ const db = createClient(
 );
 
 let answers = {};
+let remarks = {};     // 各設問の備考
 let radarChart = null;
 let histCache = [];   // 履歴一覧のメモリキャッシュ
 
@@ -502,10 +532,13 @@ function rowToData(r) {
     savedAt:     r.saved_at,
     facilityName:r.facility_name,
     industry:    r.industry,
+    address:     r.address  || '',
+    phone:       r.phone    || '',
     staff:       r.staff,
     workDays:    r.work_days,
     wage:        r.wage,
     answers:     r.answers,
+    remarks:     r.remarks  || {},
     totalPct:    r.total_pct,
     grade:       r.grade,
     gradeDesc:   r.grade_desc,
@@ -519,10 +552,13 @@ async function saveToHistory(data) {
   const { error } = await db.from('diagnoses').insert({
     facility_name: data.facilityName,
     industry:      data.industry,
+    address:       data.address  || null,
+    phone:         data.phone    || null,
     staff:         data.staff,
     work_days:     data.workDays,
     wage:          data.wage,
     answers:       data.answers,
+    remarks:       data.remarks  || {},
     total_pct:     data.totalPct,
     grade:         data.grade,
     grade_desc:    data.gradeDesc,
@@ -561,7 +597,7 @@ async function updateBadge() {
 /* ==============================
    Score computation
 ============================== */
-function computeResults(facilityName, industry, staff, workDays, wage, ans) {
+function computeResults(facilityName, industry, address, phone, staff, workDays, wage, ans, rem) {
   const catScores = {};
   let totalScore = 0, totalMax = 0;
   for (const [name, info] of Object.entries(CATS)) {
@@ -583,8 +619,9 @@ function computeResults(facilityName, industry, staff, workDays, wage, ans) {
   return {
     id: Date.now(),
     savedAt: new Date().toISOString(),
-    facilityName, industry, staff, workDays, wage,
+    facilityName, industry, address, phone, staff, workDays, wage,
     answers: { ...ans },
+    remarks: { ...rem },
     totalPct, grade, gradeDesc, catScores, wasteMins, monthlyLoss,
   };
 }
@@ -615,6 +652,12 @@ function buildResultsHTML(data, backLabel, backFn) {
       <div class="label">業務効率化 診断結果</div>
       <div class="facility">${facilityName}</div>
       <div class="industry">${industry}</div>
+      ${(data.address || data.phone) ? `
+      <div style="font-size:0.85rem; opacity:0.8; margin-bottom:4px; line-height:1.7;">
+        ${data.address ? `📍 ${data.address}` : ''}
+        ${data.address && data.phone ? '　' : ''}
+        ${data.phone   ? `📞 ${data.phone}`   : ''}
+      </div>` : ''}
       <div class="score-row">
         <div class="score-ring">
           <div class="score-num">${totalPct}%</div>
@@ -660,13 +703,44 @@ function buildResultsHTML(data, backLabel, backFn) {
       <div class="reco-body">${buildReco(sorted, catScores, aiVal, facilityName, industry, staff, wasteMins, monthlyLoss)}</div>
     </div>
 
-    <div class="card anim" style="animation-delay:.4s">
+    ${buildRemarksHTML(data.remarks)}
+
+    <div class="card anim" style="animation-delay:.5s">
       <div class="action-row">
         <button class="outline-btn" onclick="window.print()">印刷 / PDF保存</button>
         <button class="outline-btn" onclick="${backFn}">${backLabel}</button>
       </div>
     </div>
   `;
+}
+
+function buildRemarksHTML(rem) {
+  if (!rem) return '';
+  let qNum = 0;
+  const rows = [];
+  Object.keys(CATS).forEach(catName => {
+    CATS[catName].qs.forEach(qid => {
+      qNum++;
+      const text = (rem[qid] || '').trim();
+      if (text) {
+        const q = QUESTIONS.find(x => x.id === qid);
+        rows.push(`<div class="remark-row">
+          <span class="remark-qnum">Q${qNum}</span>
+          <div>
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:2px;">${q ? q.text : ''}</div>
+            <div class="remark-text">${text.replace(/\n/g, '<br>')}</div>
+          </div>
+        </div>`);
+      }
+    });
+  });
+  if (!rows.length) return '';
+  return `
+    <div class="card anim remarks-section" style="animation-delay:.45s">
+      <h2>ヒアリングメモ</h2>
+      <p class="sub">備考として入力されたメモです</p>
+      ${rows.join('')}
+    </div>`;
 }
 
 function buildReco(sorted, catScores, aiVal, name, industry, staff, wasteMins, monthlyLoss) {
@@ -755,6 +829,7 @@ function buildQuestions() {
       if (!q) return;
       qNum++;
       const saved = answers[q.id];
+      const savedRemark = remarks[q.id] || '';
       html += `<div class="q-card" id="qcard-${q.id}" style="${saved !== undefined ? 'border-color:var(--success)' : ''}">
         <div class="q-num">Q${qNum}</div>
         <div class="q-text">${q.text}</div>
@@ -767,6 +842,9 @@ function buildQuestions() {
               <div class="opt-btn">${o.l}</div>
             </label>`).join('')}
         </div>
+        <span class="remark-label">備考（任意）</span>
+        <textarea class="remark-area" placeholder="ヒアリング内容・補足など"
+          oninput="remarks['${q.id}']=this.value">${savedRemark}</textarea>
       </div>`;
     });
     el.innerHTML = html;
@@ -790,7 +868,9 @@ async function submitResults() {
   const data = computeResults(
     document.getElementById('facilityName').value,
     document.getElementById('industry').value,
-    staff, workDays, wage, answers
+    document.getElementById('address').value,
+    document.getElementById('phone').value,
+    staff, workDays, wage, answers, remarks
   );
 
   // Supabase に保存（非同期・バックグラウンド）
@@ -804,8 +884,11 @@ async function submitResults() {
 
 function resetAll() {
   answers = {};
+  remarks = {};
   document.getElementById('facilityName').value = '';
   document.getElementById('industry').value = '';
+  document.getElementById('address').value = '';
+  document.getElementById('phone').value = '';
   document.getElementById('staffCount').value = '';
   document.getElementById('workDays').value = '22';
   document.getElementById('hourlyWage').value = '1500';
